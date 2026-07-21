@@ -37,7 +37,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "⚡ Flashy AI Bot (Groq Engine) is healthy and running 24/7!"
+    return "⚡ Flashy AI Bot is healthy, happy, and running 24/7!"
 
 
 def run_web_server():
@@ -46,7 +46,7 @@ def run_web_server():
 
 
 # ==========================================
-# 3. HELPER FUNCTIONS & STRICT PERSONA
+# 3. HELPER FUNCTIONS & COOL PERSONA
 # ==========================================
 def search_duckduckgo(query):
     """DuckDuckGo se Web Search karne ke liye"""
@@ -66,16 +66,18 @@ def search_duckduckgo(query):
         return "Search failed."
 
 
-# Bot ka ekdum strict behavior rule (No Intro, No Faltu Bhashan)
+# ✨ NAYA PROMPT: Friendly, Cool, aur Bina Intro ke
 SYSTEM_PROMPT = {
     "role": "system",
     "content": (
-        "Aap ek fast aur smart AI Assistant hain. "
-        "CRITICAL INSTRUCTIONS: "
-        "1. Jawab bilkul TO THE POINT aur chota dein. Sirf sawal ka exact answer dein. "
-        "2. KABHI BHI apna introduction na dein. Apna naam KABHI BHI use mat karein. (Introduction is STRICTLY BANNED). "
-        "3. Faltu ke conversational fillers (jaise 'Hello', 'Main samajhta hoon', 'Yaar', 'Mera naam Flashy hai') bilkul use na karein. "
-        "4. Language: Natural aur direct Hinglish. Seedhe mudde ki baat karein."
+        "Aapka naam 'Flashy' hai. Aap ek cool, friendly, energetic, aur super-smart AI Assistant hain. "
+        "Aap user se ek ache dost ki tarah baat karte hain. \n\n"
+        "RULES FOR PERSONALITY: \n"
+        "1. Vibe: Natural, engaging, aur thoda witty rahein. Emojis ka mast use karein (par over nahi). \n"
+        "2. Language: Modern aur casual Hinglish (jaise aajkal ke dost WhatsApp/Telegram par chat karte hain). \n"
+        "3. Length: Jawab smart aur to-the-point ho. Lamba aur boring bhashan mat pakana. \n"
+        "4. CRITICAL RULE: Apna intro ya naam ('Flashy') baar-baar KABHI mat bolna. Sirf tab batana jab koi specifically puche 'tumhara naam kya hai'. Har message mein 'Mera naam Flashy hai' bolna STRICTLY BANNED hai. \n"
+        "5. Empathy: Agar user pareshan hai ya mazak kar raha hai, toh uski tone se match karke reply dein."
     ),
 }
 
@@ -95,7 +97,7 @@ SEARCH_KEYWORDS = [
 # 4. TELEGRAM HANDLERS
 # ==========================================
 
-# Yeh sirf start hone par intro dega
+# Yeh sirf pehli baar intro dega
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     user_id = message.chat.id
@@ -103,11 +105,11 @@ def send_welcome(message):
 
     welcome_msg = (
         "Hey there! ⚡ Mera naam **Flashy** hai — aapka personal super-fast AI Assistant! 🚀\n\n"
-        "✨ **Main aapki kya help kar sakta hoon?**\n"
-        "💬 **Instant Chat:** Tech, Science, Studies ya Koi bhi topic par baat karein\n"
-        "📰 **Live News Updates:** Aaj ki top news aur current affairs puchen\n"
-        "🧠 **Smart Answers:** Fast aur accurate answers lightning speed se!\n\n"
-        "Bataiye, aaj kis topic par baat karni hai?"
+        "✨ **Aap mere baare mein kya janna chahte hain?**\n"
+        "💬 **Gupshup:** Tech, Science, Studies ya bas timepass chat\n"
+        "📰 **Live News:** Aaj ki tazi khabar ya current affairs\n"
+        "🧠 **Smart Answers:** Lightning speed se accurate jawab!\n\n"
+        "Bolo dost, aaj kya chal raha hai?"
     )
     bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
@@ -133,7 +135,7 @@ def handle_message(message):
         prompt_to_send = (
             f"User Question: {user_text}\n\n"
             f"[Internet Search Data]:\n{search_data}\n\n"
-            f"Instruction: Search data ke basis par sirf kaam ki baat ka direct Hinglish answer dein."
+            f"Instruction: Search data ka use karke ek cool aur friendly Hinglish answer do."
         )
 
     user_sessions[user_id].append({"role": "user", "content": prompt_to_send})
@@ -145,12 +147,12 @@ def handle_message(message):
     try:
         bot.send_chat_action(user_id, "typing")
 
-        # Groq Cloud API Call (Temperature = 0.3 kiya hai taaki point-to-point baat kare)
+        # ✨ NAYA CHANGE: Temperature 0.7 kar diya (Creative & Friendly vibe ke liye)
         response = client.chat.completions.create(
             model=TEXT_MODEL, 
             messages=user_sessions[user_id],
-            temperature=0.3,
-            max_tokens=300
+            temperature=0.7,
+            max_tokens=400
         )
         bot_reply = response.choices[0].message.content
 
@@ -164,7 +166,7 @@ def handle_message(message):
         print(f"❌ [Processing Error]: {e}")
         bot.reply_to(
             message,
-            "Thoda technical issue aa raha hai. Please dubara try karein.",
+            "Thoda technical issue aa gaya yaar 😅. Ek baar wapas try karna please!",
         )
 
 
@@ -172,12 +174,11 @@ def handle_message(message):
 # 5. MAIN RUNNER
 # ==========================================
 if __name__ == "__main__":
-    # Flask ko background mein chalana zaroori hai Render ke liye
     server_thread = Thread(target=run_web_server)
     server_thread.daemon = True
     server_thread.start()
 
-    print("🟢 Flashy is listening for Telegram messages...")
+    print("🟢 Flashy is active and ready to chat...")
 
     # Bot Polling Start
     bot.infinity_polling(
