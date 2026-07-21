@@ -36,7 +36,6 @@ user_sessions = {}
 
 # ==========================================
 # ⭐ STICKER DATABASE 
-# (Yahan apne sticker packs se IDs nikal kar paste karein)
 # ==========================================
 STICKER_MAP = {
     "laugh": "YAHAN_LAUGH_WALA_ID_DAALEIN", 
@@ -108,16 +107,17 @@ def send_welcome(message):
     )
     bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
-# 🛠️ STICKER PACK ID FINDER COMMAND (/getpack PackName)
+# 🛠️ STICKER PACK ID FINDER COMMAND
 @bot.message_handler(commands=['getpack'])
 def get_sticker_pack(message):
     try:
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "Bhai pack ka naam bhi likho! Jaise: `/getpack AnimalsAnimation`", parse_mode="Markdown")
+            bot.reply_to(message, "Bhai pack ka short name likho! Jaise: `/getpack AnimalsAnimation`", parse_mode="Markdown")
             return
         
-        pack_name = args[1]
+        # Agar user ne '@' laga diya hai toh usko apne aap hata dega
+        pack_name = args[1].lstrip('@')
         bot.send_chat_action(message.chat.id, "typing")
         
         sticker_set = bot.get_sticker_set(pack_name)
@@ -126,10 +126,11 @@ def get_sticker_pack(message):
         for i, sticker in enumerate(sticker_set.stickers[:10]):
             response_text += f"{i+1}. `{sticker.file_id}`\n\n"
             
-        bot.reply_to(message, response_text, parse_motion="Markdown" if hasattr(bot, 'Markdown') else "Markdown")
+        # Fixed typo: parse_motion -> parse_mode
+        bot.reply_to(message, response_text, parse_mode="Markdown")
         
     except Exception as e:
-        bot.reply_to(message, f"❌ Error aa gaya bhai: `{e}`", parse_mode="Markdown")
+        bot.reply_to(message, f"❌ Error aa gaya bhai: `{e}`\n\n*(Tip: Sirf sticker pack ka short name do, jaise `AnimalsAnimation`)*", parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
