@@ -9,7 +9,7 @@ from groq import Groq
 import telebot
 from telebot.types import KeyboardButton, ReplyKeyboardMarkup
 
-# Updated DDGS import warning fix
+
 try:
     from ddgs import DDGS
 except ImportError:
@@ -27,10 +27,10 @@ API_KEYS = [
     os.environ.get("GROQ_API_KEY_2"),
     os.environ.get("GROQ_API_KEY_3")
 ]
-# Filter out empty or None keys
+
 API_KEYS = [k for k in API_KEYS if k]
 
-# Security Checks
+
 if not BOT_TOKEN:
     print("❌ CRITICAL ERROR: 'BOT_TOKEN' missing hai!")
     sys.exit(1)
@@ -41,7 +41,7 @@ if not ADMIN_CHAT_ID:
     print("❌ CRITICAL ERROR: 'ADMIN_CHAT_ID' missing hai!")
     sys.exit(1)
 
-# Initialize Telegram Bot
+
 bot = telebot.TeleBot(BOT_TOKEN)
 TEXT_MODEL = "llama-3.3-70b-versatile"
 user_sessions = {}
@@ -127,7 +127,6 @@ def get_groq_response(messages_history):
 
     raise Exception("Sabhi Groq API keys ki limit finished ho gayi hai!")
 
-# PERSONA & RULES
 SYSTEM_PROMPT = {
     "role": "system",
     "content": (
