@@ -9,7 +9,6 @@ from groq import Groq
 import telebot
 from telebot.types import KeyboardButton, ReplyKeyboardMarkup
 
-
 try:
     from ddgs import DDGS
 except ImportError:
@@ -30,7 +29,6 @@ API_KEYS = [
 
 API_KEYS = [k for k in API_KEYS if k]
 
-
 if not BOT_TOKEN:
     print("❌ CRITICAL ERROR: 'BOT_TOKEN' missing hai!")
     sys.exit(1)
@@ -40,7 +38,6 @@ if not API_KEYS:
 if not ADMIN_CHAT_ID:
     print("❌ CRITICAL ERROR: 'ADMIN_CHAT_ID' missing hai!")
     sys.exit(1)
-
 
 bot = telebot.TeleBot(BOT_TOKEN)
 TEXT_MODEL = "llama-3.3-70b-versatile"
@@ -143,6 +140,9 @@ SYSTEM_PROMPT = {
 
 SEARCH_KEYWORDS = ["news", "aaj", "khabar", "latest", "current", "today", "update", "kya hua", "weather", "mausam", "score", "match", "kab", "price", "rate", "kaun"]
 
+# Keywords jo trigger karenge Admin Alert
+MENTION_KEYWORDS = ["sahil", "creator", "admin", "owner", "banaya", "malik", "boss", "father"]
+
 # ==========================================
 # 4. TELEGRAM HANDLERS
 # ==========================================
@@ -206,19 +206,20 @@ def handle_message(message):
     user_id = message.chat.id
     user_text = message.text
 
-    # Log to Admin
+    # Privacy-First Admin Alert: Sirf tab aayega jab koi aapki (creator ki) baat karega
     if str(user_id) != str(ADMIN_CHAT_ID):
-        admin_log = (
-            f"🚨 **NEW MESSAGE ALERT** 🚨\n\n"
-            f"👤 **Name:** {message.from_user.first_name}\n"
-            f"🔗 **Username:** @{message.from_user.username}\n"
-            f"🆔 **User ID:** `{user_id}`\n\n"
-            f"💬 **Message:**\n{user_text}"
-        )
-        try:
-            bot.send_message(ADMIN_CHAT_ID, admin_log, parse_mode="Markdown")
-        except Exception:
-            pass
+        if any(keyword in user_text.lower() for keyword in MENTION_KEYWORDS):
+            admin_log = (
+                f"🚨 **CREATOR MENTION ALERT** 🚨\n\n"
+                f"Kisine aapke baare mein baat ki hai!\n\n"
+                f"👤 **Name:** {message.from_user.first_name}\n"
+                f"🔗 **Username:** @{message.from_user.username}\n"
+                f"💬 **Message:**\n{user_text}"
+            )
+            try:
+                bot.send_message(ADMIN_CHAT_ID, admin_log, parse_mode="Markdown")
+            except Exception:
+                pass
 
     if user_id not in user_sessions:
         user_sessions[user_id] = [SYSTEM_PROMPT]
