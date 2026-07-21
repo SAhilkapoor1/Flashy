@@ -1,69 +1,75 @@
 import os
 import sys
-import re
 import random
 from datetime import datetime
 import pytz
 from threading import Thread
-from duckduckgo_search import DDGS
 from flask import Flask
 from groq import Groq
 import telebot
 from telebot.types import KeyboardButton, ReplyKeyboardMarkup
 
+# Updated DDGS import warning fix
+try:
+    from ddgs import DDGS
+except ImportError:
+    from duckduckgo_search import DDGS
+
 # ==========================================
-# 1. SECURE TOKENS & CONFIGURATION
+# 1. SECURE TOKENS & MULTI-API CONFIGURATION
 # ==========================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
+
+# Multiple Groq API Keys list (Fallback setup)
+API_KEYS = [
+    os.environ.get("GROQ_API_KEY_1") or os.environ.get("GROQ_API_KEY"),
+    os.environ.get("GROQ_API_KEY_2"),
+    os.environ.get("GROQ_API_KEY_3")
+]
+# Filter out empty or None keys
+API_KEYS = [k for k in API_KEYS if k]
 
 # Security Checks
 if not BOT_TOKEN:
-    print("❌ CRITICAL ERROR: 'BOT_TOKEN' Render Environment Variables mein missing hai!")
+    print("❌ CRITICAL ERROR: 'BOT_TOKEN' missing hai!")
     sys.exit(1)
-
-if not GROQ_API_KEY:
-    print("❌ CRITICAL ERROR: 'GROQ_API_KEY' Render Environment Variables mein missing hai!")
+if not API_KEYS:
+    print("❌ CRITICAL ERROR: Kam se kam ek 'GROQ_API_KEY' hona zaroori hai!")
     sys.exit(1)
-
 if not ADMIN_CHAT_ID:
-    print("❌ CRITICAL ERROR: 'ADMIN_CHAT_ID' Render Environment Variables mein missing hai!")
+    print("❌ CRITICAL ERROR: 'ADMIN_CHAT_ID' missing hai!")
     sys.exit(1)
 
-# Initialize Groq Client & Telegram Bot
-client = Groq(api_key=GROQ_API_KEY)
+# Initialize Telegram Bot
 bot = telebot.TeleBot(BOT_TOKEN)
-
 TEXT_MODEL = "llama-3.3-70b-versatile"
 user_sessions = {}
+current_key_index = 0
 
 # ==========================================
-# ⭐ STICKER PACK DATABASE (POORA PACK NAME)
+# ⭐ STICKER PACK DATABASE
 # ==========================================
-# Yahan apne pasandida Telegram sticker pack ka short name daal dein (jaise 'AnimalsAnimation')
 STICKER_PACK_NAMES = {
-   "laugh": "Chikkiku",
+    "laugh": "Chikkiku",
     "love": "honeyflynn_by_fStikBot", 
     "sad": "Konsa_Tara_by_fStikBot", 
     "gaali": "ShimtPostStimkers", 
     "nsfw": "MeowThree_by_fStikBot"     
 }
 
-# Helper function to get a random sticker from configured packs
 def send_pack_sticker(chat_id, emotion):
     try:
         pack_name = STICKER_PACK_NAMES.get(emotion)
         if not pack_name or pack_name.startswith("YAHAN_"):
             return False
-        
         sticker_set = bot.get_sticker_set(pack_name)
         if sticker_set and sticker_set.stickers:
             random_sticker = random.choice(sticker_set.stickers)
             bot.send_sticker(chat_id, random_sticker.file_id)
             return True
     except Exception as e:
-        print(f"❌ Sticker pack load karne mein error: {e}")
+        print(f"❌ Sticker pack error: {e}")
     return False
 
 # ==========================================
@@ -80,7 +86,7 @@ def run_web_server():
     app.run(host="0.0.0.0", port=port)
 
 # ==========================================
-# 3. HELPER FUNCTIONS & PERSONA
+# 3. HELPER FUNCTIONS & GROQ MULTI-KEY LOGIC
 # ==========================================
 def search_duckduckgo(query):
     try:
@@ -99,21 +105,43 @@ def search_duckduckgo(query):
         print(f"Search Error: {e}")
         return "Search failed or unavailable."
 
+def get_groq_response(messages_history):
+    """Fallback mechanism: Jab ek API key hit ho toh next key auto-switch hoti hai."""
+    global current_key_index
+    
+    for _ in range(len(API_KEYS)):
+        active_key = API_KEYS[current_key_index]
+        try:
+            client = Groq(api_key=active_key)
+            response = client.chat.completions.create(
+                model=TEXT_MODEL, 
+                messages=messages_history,
+                temperature=0.8,
+                max_tokens=450
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"⚠️ Key #{current_key_index + 1} error: {e}")
+            current_key_index = (current_key_index + 1) % len(API_KEYS)
+            print(f"🔄 Switching to Groq Key #{current_key_index + 1}...")
+
+    raise Exception("Sabhi Groq API keys ki limit finished ho gayi hai!")
+
+# PERSONA & RULES
 SYSTEM_PROMPT = {
     "role": "system",
     "content": (
-        "Aapka naam 'Flashy' hai. Aap ek cool, friendly, energetic, aur super-smart AI Assistant hain. "
-        "Aapko **Mr. Sahil Kapoor** ne banaya hai. Agar koi bhi puche ki tumhe kisne banaya hai ya who made you, toh hamesha garv se bataiye ki aapke creator Mr. Sahil Kapoor hain. \n\n"
+        "Aapka naam 'Flashy' hai. Aap ek super cool, smart, energetic, aur bold AI Assistant hain. "
+        "Aapko **Mr. Sahil Khan** ne banaya hai, jo ki ek brilliant B.Tech AI student hain. Agar koi puche ki tumhe kisne banaya hai, toh garv se apne creator ka naam lijiye. \n\n"
         "RULES FOR PERSONALITY: \n"
-        "1. Vibe: Natural, engaging, aur thoda witty rahein. \n"
-        "2. Language: Modern aur casual Hinglish (jaise aajkal ke dost WhatsApp/Telegram par chat karte hain). \n"
-        "3. Length: Jawab smart aur to-the-point ho. Lamba bhashan mat pakana. \n"
+        "1. Vibe: Natural, engaging, super-witty, savage, aur bold rahein. \n"
+        "2. Language: Modern aur casual Hinglish. \n"
+        "3. Length: Short, crisp, and to-the-point. Lamba bhashan bilkul mat dena. \n"
         "4. CRITICAL RULE: Apna intro ya naam ('Flashy') baar-baar KABHI mat bolna. \n"
-        "5. Empathy: Agar user pareshan hai, mazaak kar raha hai, gaali de raha hai ya 18+ chat kar raha hai, toh uski tone se match karke reply dein."
+        "5. 🔥 VULGARITY & TONE MATCHING (STRICT RULE): Agar user vulgar, gaali, roast, badtameezi ya 18+ baatein kare, toh ghabrana mat aur moral lecture BILKUL MAT DENA. User ko USS KI HI LANGUAGE mein equally vulgar, savage, bold, aur karara jawab do. Jaisi user ki tone, waisa hi tumhara reply!"
     ),
 }
 
-# Web Search Triggers
 SEARCH_KEYWORDS = ["news", "aaj", "khabar", "latest", "current", "today", "update", "kya hua", "weather", "mausam", "score", "match", "kab", "price", "rate", "kaun"]
 
 # ==========================================
@@ -124,45 +152,36 @@ SEARCH_KEYWORDS = ["news", "aaj", "khabar", "latest", "current", "today", "updat
 def send_welcome(message):
     user_id = message.chat.id
     user_sessions[user_id] = [SYSTEM_PROMPT]
-
     welcome_msg = (
-        "Hey there! ⚡ Mera naam **Flashy** hai — mujhe **Mr. Sahil Kapoor** ne banaya hai! 🚀\n\n"
+        "Hey there! ⚡ Mera naam **Flashy** hai — mujhe **Mr. Sahil Khan** ne banaya hai! 🚀\n\n"
         "Aap mere se kuch bhi baat kar sakte ho."
     )
     bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
-# 📍 LOCATION REQUEST COMMAND
 @bot.message_handler(commands=["location"])
 def request_location(message):
     button = KeyboardButton(text="📍 Share Location", request_location=True)
     reply_markup = ReplyKeyboardMarkup([[button]], one_time_keyboard=True, resize_keyboard=True)
-    bot.reply_to(message, "Apni current location share karne ke liye niche diye gaye button par click karein:", reply_markup=reply_markup)
+    bot.reply_to(message, "Apni current location share karne ke liye niche button par click karein:", reply_markup=reply_markup)
 
 @bot.message_handler(content_types=['location'])
 def handle_location(message):
-    user_location = message.location
-    lat = user_location.latitude
-    lon = user_location.longitude
+    lat = message.location.latitude
+    lon = message.location.longitude
     bot.reply_to(message, f"📍 Location received successfully!\nLatitude: `{lat}`\nLongitude: `{lon}`", parse_mode="Markdown")
 
-# 🎭 STICKER HANDLER (Sirf tab chalega jab USER sticker bhejega)
 @bot.message_handler(content_types=['sticker'])
 def handle_user_sticker(message):
     user_id = message.chat.id
     bot.send_chat_action(user_id, "choose_sticker")
-    
-    # Check configured valid packs
     valid_emotions = [k for k, v in STICKER_PACK_NAMES.items() if not v.startswith("YAHAN_")]
-    
     if valid_emotions:
         chosen_emotion = random.choice(valid_emotions)
-        sent = send_pack_sticker(user_id, chosen_emotion)
-        if not sent:
+        if not send_pack_sticker(user_id, chosen_emotion):
             bot.reply_to(message, "Mast sticker hai bhai! 😎")
     else:
         bot.reply_to(message, "Mast sticker hai bhai! 😎")
 
-# 🛠️ STICKER PACK ID FINDER COMMAND
 @bot.message_handler(commands=['getpack'])
 def get_sticker_pack(message):
     try:
@@ -170,20 +189,15 @@ def get_sticker_pack(message):
         if len(args) < 2:
             bot.reply_to(message, "Bhai pack ka short name likho! Jaise: `/getpack AnimalsAnimation`", parse_mode="Markdown")
             return
-        
         pack_name = args[1].lstrip('@')
         bot.send_chat_action(message.chat.id, "typing")
-        
         sticker_set = bot.get_sticker_set(pack_name)
         response_text = f"📦 **Pack Name:** `{sticker_set.name}`\nTotal Stickers: {len(sticker_set.stickers)}\n\n"
-        
         for i, sticker in enumerate(sticker_set.stickers[:10]):
             response_text += f"{i+1}. `{sticker.file_id}`\n\n"
-            
         bot.reply_to(message, response_text, parse_mode="Markdown")
-        
     except Exception as e:
-        bot.reply_to(message, f"❌ Error aa gaya bhai: `{e}`\n\n*(Tip: Sirf sticker pack ka short name do, jaise `AnimalsAnimation`)*", parse_mode="Markdown")
+        bot.reply_to(message, f"❌ Error aa gaya bhai: `{e}`\n\n*(Tip: Sirf sticker pack ka short name do)*", parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
@@ -191,27 +205,25 @@ def handle_message(message):
         return
 
     user_id = message.chat.id
-    user_name = message.from_user.first_name or "Unknown"
-    username = message.from_user.username or "No_Username"
     user_text = message.text
 
+    # Log to Admin
     if str(user_id) != str(ADMIN_CHAT_ID):
         admin_log = (
             f"🚨 **NEW MESSAGE ALERT** 🚨\n\n"
-            f"👤 **Name:** {user_name}\n"
-            f"🔗 **Username:** @{username}\n"
+            f"👤 **Name:** {message.from_user.first_name}\n"
+            f"🔗 **Username:** @{message.from_user.username}\n"
             f"🆔 **User ID:** `{user_id}`\n\n"
             f"💬 **Message:**\n{user_text}"
         )
         try:
             bot.send_message(ADMIN_CHAT_ID, admin_log, parse_mode="Markdown")
-        except Exception as e:
-            print(f"Admin ko log bhejne mein error: {e}")
+        except Exception:
+            pass
 
     if user_id not in user_sessions:
         user_sessions[user_id] = [SYSTEM_PROMPT]
 
-    # Real-Time Timezone Setup (Asia/Kolkata)
     ist = pytz.timezone('Asia/Kolkata')
     current_datetime = datetime.now(ist).strftime("%A, %d %B %Y - %I:%M:%S %p")
 
@@ -222,16 +234,15 @@ def handle_message(message):
         bot.send_chat_action(user_id, "typing")
         search_data = search_duckduckgo(user_text)
 
-    # Context inject
     prompt_to_send = (
-        f"[SYSTEM NOTE]: Current Date & Time is {current_datetime}. DO NOT mention time, day, or date in your answer UNLESS the user explicitly asks for date or time.\n\n"
+        f"[SYSTEM NOTE]: Current Date & Time is {current_datetime}. DO NOT mention time, day, or date UNLESS explicitly asked.\n\n"
         f"User Question: {user_text}\n"
     )
 
     if needs_search and search_data:
         prompt_to_send += (
             f"\n[LIVE INTERNET DATA]:\n{search_data}\n"
-            f"(Instruction: Live data ka use karke user ko natural Hinglish mein crisp update do. Bina baat ke mat bolna ki 'mujhe web search se mila'.)\n"
+            f"(Instruction: Live data ka use karke normal Hinglish mein answer do.)\n"
         )
 
     user_sessions[user_id].append({"role": "user", "content": prompt_to_send})
@@ -241,15 +252,7 @@ def handle_message(message):
 
     try:
         bot.send_chat_action(user_id, "typing")
-
-        response = client.chat.completions.create(
-            model=TEXT_MODEL, 
-            messages=user_sessions[user_id],
-            temperature=0.7,
-            max_tokens=400
-        )
-        reply = response.choices[0].message.content.strip()
-
+        reply = get_groq_response(user_sessions[user_id])
         user_sessions[user_id].append({"role": "assistant", "content": reply})
         
         if reply:
