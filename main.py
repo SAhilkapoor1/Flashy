@@ -3,25 +3,29 @@ import sys
 from threading import Thread
 from duckduckgo_search import DDGS
 from flask import Flask
-import ollama
+from groq import Groq
 import telebot
 
 # ==========================================
-# 1. SECURE TOKEN & CONFIGURATION
+# 1. SECURE TOKENS & CONFIGURATION
 # ==========================================
-
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
+# Security Checks
 if not BOT_TOKEN:
-    print("\n❌ CRITICAL ERROR: 'BOT_TOKEN' environment variable nahi mila!")
-    print(
-        "👉 Render Dashboard -> Environment Variables mein jakar Key: 'BOT_TOKEN' aur Value: 'Your_Token' add karein.\n"
-    )
+    print("❌ CRITICAL ERROR: 'BOT_TOKEN' missing in Environment Variables!")
     sys.exit(1)
 
-TEXT_MODEL = "llama3.2"  # Main Chat & Search Model
+if not GROQ_API_KEY:
+    print("❌ CRITICAL ERROR: 'GROQ_API_KEY' missing in Environment Variables!")
+    sys.exit(1)
 
+# Initialize Groq Client & Telegram Bot
+client = Groq(api_key=GROQ_API_KEY)
 bot = telebot.TeleBot(BOT_TOKEN)
+
+TEXT_MODEL = "llama-3.2-3b-preview"  # Groq par ultra-fast Llama 3.2 model
 user_sessions = {}
 
 
@@ -42,7 +46,7 @@ def run_web_server():
 
 
 # ==========================================
-# 3. HELPER FUNCTIONS & PERSONAL
+# 3. HELPER FUNCTIONS & PERSONA
 # ==========================================
 def search_duckduckgo(query):
     """DuckDuckGo se Web Search karne ke liye"""
@@ -55,12 +59,12 @@ def search_duckduckgo(query):
                 results.append(f"Title: {r['title']}\nSnippet: {r['body']}")
 
         if results:
-            print("✅ [Web Search]: Results fetched successfully.")
             return "\n\n".join(results)
         return "No web results found."
     except Exception as e:
         print(f"❌ [Search Error]: {e}")
         return "Search failed."
+
 
 SYSTEM_PROMPT = {
     "role": "system",
@@ -89,12 +93,10 @@ SEARCH_KEYWORDS = [
 # ==========================================
 
 
-# /start command (Introduction Message)
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     user_id = message.chat.id
     user_sessions[user_id] = [SYSTEM_PROMPT]
-    print(f"\n👤 [User {user_id}]: Started the bot.")
 
     welcome_msg = (
         "Hey there! ⚡ Mera naam **Flashy** hai — aapka personal super-fast AI Assistant! 🚀\n\n"
@@ -107,7 +109,6 @@ def send_welcome(message):
     bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
 
-# Text Handler (Chat & Search)
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     user_id = message.chat.id
@@ -138,18 +139,18 @@ def handle_message(message):
 
     try:
         bot.send_chat_action(user_id, "typing")
-        print(f"🧠 [Flashy Thinking]: Processing using '{TEXT_MODEL}'...")
 
-        response = ollama.chat(
+        # Groq API call
+        response = client.chat.completions.create(
             model=TEXT_MODEL, messages=user_sessions[user_id]
         )
-        bot_reply = response["message"]["content"]
+        bot_reply = response.choices[0].message.content
 
         user_sessions[user_id].append(
             {"role": "assistant", "content": bot_reply}
         )
         bot.reply_to(message, bot_reply)
-        print("✅ [Flashy Reply]: Sent successfully.")
+        print("✅ [Flashy Reply]: Sent successfully via Groq.")
 
     except Exception as e:
         print(f"❌ [Processing Error]: {e}")
@@ -160,20 +161,14 @@ def handle_message(message):
 
 
 # ==========================================
-# 5. MAIN RUNNER WITH STABLE POLLING
+# 5. MAIN RUNNER
 # ==========================================
 if __name__ == "__main__":
-    print("--------------------------------------------------")
-    print("⚡ Flashy AI Bot starting in Secure Mode...")
-
     server_thread = Thread(target=run_web_server)
     server_thread.daemon = True
     server_thread.start()
-    print("🌐 Web Server started (Port binding ready).")
 
-    print(f"📌 Model Loaded : {TEXT_MODEL}")
-    print("🟢 Flashy is listening for Telegram messages...")
-    print("--------------------------------------------------")
+    print("🟢 Flashy (Groq Cloud) is listening for Telegram messages...")
 
     bot.infinity_polling(
         timeout=20, long_polling_timeout=10, skip_pending=True
