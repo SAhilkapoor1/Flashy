@@ -42,30 +42,29 @@ user_sessions = {}
 # ⭐ STICKER PACK DATABASE (POORA PACK NAME)
 # ==========================================
 # Yahan apne pasandida Telegram sticker pack ka short name daal dein (jaise 'AnimalsAnimation')
-# Bot is pack ke saare stickers mein se automatic random sticker utha lega!
 STICKER_PACK_NAMES = {
-    "laugh": "Chikkiku", 
-    "love": "honeyflynn_by_fStikBot",
-    "sad": "Konsa_Tara_by_fStikBot",
-    "gaali": "ShimtPostStimkers",  
+   "laugh": "Chikkiku",
+    "love": "honeyflynn_by_fStikBot", 
+    "sad": "Konsa_Tara_by_fStikBot", 
+    "gaali": "ShimtPostStimkers", 
     "nsfw": "MeowThree_by_fStikBot"     
 }
 
-# Helper function to get a random sticker from a pack
+# Helper function to get a random sticker from configured packs
 def send_pack_sticker(chat_id, emotion):
     try:
         pack_name = STICKER_PACK_NAMES.get(emotion)
         if not pack_name or pack_name.startswith("YAHAN_"):
-            return
+            return False
         
-        # Telegram se sticker set fetch karo
         sticker_set = bot.get_sticker_set(pack_name)
         if sticker_set and sticker_set.stickers:
-            # Pack ke saare stickers me se koi ek random sticker chun lo
             random_sticker = random.choice(sticker_set.stickers)
             bot.send_sticker(chat_id, random_sticker.file_id)
+            return True
     except Exception as e:
         print(f"❌ Sticker pack load karne mein error: {e}")
+    return False
 
 # ==========================================
 # 2. RENDER KEEP-ALIVE SERVER (FLASK)
@@ -87,14 +86,18 @@ def search_duckduckgo(query):
     try:
         results = []
         with DDGS() as ddgs:
-            search_results = list(ddgs.text(query, max_results=3))
+            search_results = list(ddgs.text(query, max_results=5))
             for r in search_results:
-                results.append(f"Title: {r['title']}\nSnippet: {r['body']}")
+                title = r.get('title', '')
+                body = r.get('body', '')
+                if title or body:
+                    results.append(f"Title: {title}\nSnippet: {body}")
         if results:
             return "\n\n".join(results)
-        return "No web results found."
-    except:
-        return "Search failed."
+        return "No recent web results found."
+    except Exception as e:
+        print(f"Search Error: {e}")
+        return "Search failed or unavailable."
 
 SYSTEM_PROMPT = {
     "role": "system",
@@ -106,13 +109,12 @@ SYSTEM_PROMPT = {
         "2. Language: Modern aur casual Hinglish (jaise aajkal ke dost WhatsApp/Telegram par chat karte hain). \n"
         "3. Length: Jawab smart aur to-the-point ho. Lamba bhashan mat pakana. \n"
         "4. CRITICAL RULE: Apna intro ya naam ('Flashy') baar-baar KABHI mat bolna. \n"
-        "5. Empathy: Agar user pareshan hai, mazaak kar raha hai, gaali de raha hai ya 18+ chat kar raha hai, toh uski tone se match karke reply dein. \n"
-        "6. 🔴 STICKERS RULE (CRITICAL): Agar situation ke hisaab se koi emotion dikhana ho, ya user gaali/18+ chat kar raha ho toh message ke bilkul AAKHIRI mein yeh tag lagayein: "
-        "[STICKER: laugh], [STICKER: love], [STICKER: sad], [STICKER: gaali], ya [STICKER: nsfw]."
+        "5. Empathy: Agar user pareshan hai, mazaak kar raha hai, gaali de raha hai ya 18+ chat kar raha hai, toh uski tone se match karke reply dein."
     ),
 }
 
-SEARCH_KEYWORDS = ["news", "aaj", "khabar", "latest", "current", "today", "update", "kya hua", "weather", "mausam"]
+# Web Search Triggers
+SEARCH_KEYWORDS = ["news", "aaj", "khabar", "latest", "current", "today", "update", "kya hua", "weather", "mausam", "score", "match", "kab", "price", "rate", "kaun"]
 
 # ==========================================
 # 4. TELEGRAM HANDLERS
@@ -142,6 +144,23 @@ def handle_location(message):
     lat = user_location.latitude
     lon = user_location.longitude
     bot.reply_to(message, f"📍 Location received successfully!\nLatitude: `{lat}`\nLongitude: `{lon}`", parse_mode="Markdown")
+
+# 🎭 STICKER HANDLER (Sirf tab chalega jab USER sticker bhejega)
+@bot.message_handler(content_types=['sticker'])
+def handle_user_sticker(message):
+    user_id = message.chat.id
+    bot.send_chat_action(user_id, "choose_sticker")
+    
+    # Check configured valid packs
+    valid_emotions = [k for k, v in STICKER_PACK_NAMES.items() if not v.startswith("YAHAN_")]
+    
+    if valid_emotions:
+        chosen_emotion = random.choice(valid_emotions)
+        sent = send_pack_sticker(user_id, chosen_emotion)
+        if not sent:
+            bot.reply_to(message, "Mast sticker hai bhai! 😎")
+    else:
+        bot.reply_to(message, "Mast sticker hai bhai! 😎")
 
 # 🛠️ STICKER PACK ID FINDER COMMAND
 @bot.message_handler(commands=['getpack'])
@@ -197,22 +216,23 @@ def handle_message(message):
     current_datetime = datetime.now(ist).strftime("%A, %d %B %Y - %I:%M:%S %p")
 
     needs_search = any(keyword in user_text.lower() for keyword in SEARCH_KEYWORDS)
-    prompt_to_send = user_text
-
     search_data = ""
+
     if needs_search:
         bot.send_chat_action(user_id, "typing")
         search_data = search_duckduckgo(user_text)
 
-    # Context inject with Real-time Date, Time & Search Data
+    # Context inject
     prompt_to_send = (
-        f"[Current Real-Time Context]: Date & Time (IST): {current_datetime}\n"
-        f"User Question: {user_text}\n\n"
+        f"[SYSTEM NOTE]: Current Date & Time is {current_datetime}. DO NOT mention time, day, or date in your answer UNLESS the user explicitly asks for date or time.\n\n"
+        f"User Question: {user_text}\n"
     )
+
     if needs_search and search_data:
-        prompt_to_send += f"[Internet Live Browsing Data]:\n{search_data}\n\n"
-    
-    prompt_to_send += "Instruction: Real-time date/time aur search data ka use karke ek cool aur friendly Hinglish answer do."
+        prompt_to_send += (
+            f"\n[LIVE INTERNET DATA]:\n{search_data}\n"
+            f"(Instruction: Live data ka use karke user ko natural Hinglish mein crisp update do. Bina baat ke mat bolna ki 'mujhe web search se mila'.)\n"
+        )
 
     user_sessions[user_id].append({"role": "user", "content": prompt_to_send})
 
@@ -228,24 +248,12 @@ def handle_message(message):
             temperature=0.7,
             max_tokens=400
         )
-        raw_reply = response.choices[0].message.content
+        reply = response.choices[0].message.content.strip()
 
-        sticker_match = re.search(r'\[STICKER:\s*([a-zA-Z]+)\]', raw_reply)
-        emotion_to_send = None
-
-        if sticker_match:
-            emotion_to_send = sticker_match.group(1).lower()
-            clean_reply = re.sub(r'\[STICKER:\s*[a-zA-Z]+\]', '', raw_reply).strip()
-        else:
-            clean_reply = raw_reply
-
-        user_sessions[user_id].append({"role": "assistant", "content": clean_reply})
+        user_sessions[user_id].append({"role": "assistant", "content": reply})
         
-        if clean_reply:
-            bot.reply_to(message, clean_reply)
-        
-        if emotion_to_send and emotion_to_send in STICKER_PACK_NAMES:
-            send_pack_sticker(user_id, emotion_to_send)
+        if reply:
+            bot.reply_to(message, reply)
 
     except Exception as e:
         print(f"❌ Error: {e}")
