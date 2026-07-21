@@ -1,4 +1,4 @@
 pyTelegramBotAPI
-ollama
+groq
 duckduckgo_search
 Flask
