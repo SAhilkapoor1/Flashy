@@ -1,11 +1,15 @@
 import os
 import sys
 import re
+import random
+from datetime import datetime
+import pytz
 from threading import Thread
 from duckduckgo_search import DDGS
 from flask import Flask
 from groq import Groq
 import telebot
+from telebot.types import KeyboardButton, ReplyKeyboardMarkup
 
 # ==========================================
 # 1. SECURE TOKENS & CONFIGURATION
@@ -35,15 +39,33 @@ TEXT_MODEL = "llama-3.3-70b-versatile"
 user_sessions = {}
 
 # ==========================================
-# ⭐ STICKER DATABASE 
+# ⭐ STICKER PACK DATABASE (POORA PACK NAME)
 # ==========================================
-STICKER_MAP = {
-    "laugh": "YAHAN_LAUGH_WALA_ID_DAALEIN", 
-    "love": "YAHAN_LOVE_WALA_ID_DAALEIN",
-    "sad": "YAHAN_SAD_WALA_ID_DAALEIN",
-    "gaali": "YAHAN_GAALI_WALA_ID_DAALEIN",  
-    "nsfw": "YAHAN_NSFW_WALA_ID_DAALEIN"     
+# Yahan apne pasandida Telegram sticker pack ka short name daal dein (jaise 'AnimalsAnimation')
+# Bot is pack ke saare stickers mein se automatic random sticker utha lega!
+STICKER_PACK_NAMES = {
+    "laugh": "Chikkiku", 
+    "love": "honeyflynn_by_fStikBot",
+    "sad": "Konsa_Tara_by_fStikBot",
+    "gaali": "ShimtPostStimkers",  
+    "nsfw": "MeowThree_by_fStikBot"     
 }
+
+# Helper function to get a random sticker from a pack
+def send_pack_sticker(chat_id, emotion):
+    try:
+        pack_name = STICKER_PACK_NAMES.get(emotion)
+        if not pack_name or pack_name.startswith("YAHAN_"):
+            return
+        
+        # Telegram se sticker set fetch karo
+        sticker_set = bot.get_sticker_set(pack_name)
+        if sticker_set and sticker_set.stickers:
+            # Pack ke saare stickers me se koi ek random sticker chun lo
+            random_sticker = random.choice(sticker_set.stickers)
+            bot.send_sticker(chat_id, random_sticker.file_id)
+    except Exception as e:
+        print(f"❌ Sticker pack load karne mein error: {e}")
 
 # ==========================================
 # 2. RENDER KEEP-ALIVE SERVER (FLASK)
@@ -90,7 +112,7 @@ SYSTEM_PROMPT = {
     ),
 }
 
-SEARCH_KEYWORDS = ["news", "aaj", "khabar", "latest", "current", "today", "update", "kya hua"]
+SEARCH_KEYWORDS = ["news", "aaj", "khabar", "latest", "current", "today", "update", "kya hua", "weather", "mausam"]
 
 # ==========================================
 # 4. TELEGRAM HANDLERS
@@ -107,6 +129,20 @@ def send_welcome(message):
     )
     bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
+# 📍 LOCATION REQUEST COMMAND
+@bot.message_handler(commands=["location"])
+def request_location(message):
+    button = KeyboardButton(text="📍 Share Location", request_location=True)
+    reply_markup = ReplyKeyboardMarkup([[button]], one_time_keyboard=True, resize_keyboard=True)
+    bot.reply_to(message, "Apni current location share karne ke liye niche diye gaye button par click karein:", reply_markup=reply_markup)
+
+@bot.message_handler(content_types=['location'])
+def handle_location(message):
+    user_location = message.location
+    lat = user_location.latitude
+    lon = user_location.longitude
+    bot.reply_to(message, f"📍 Location received successfully!\nLatitude: `{lat}`\nLongitude: `{lon}`", parse_mode="Markdown")
+
 # 🛠️ STICKER PACK ID FINDER COMMAND
 @bot.message_handler(commands=['getpack'])
 def get_sticker_pack(message):
@@ -116,7 +152,6 @@ def get_sticker_pack(message):
             bot.reply_to(message, "Bhai pack ka short name likho! Jaise: `/getpack AnimalsAnimation`", parse_mode="Markdown")
             return
         
-        # Agar user ne '@' laga diya hai toh usko apne aap hata dega
         pack_name = args[1].lstrip('@')
         bot.send_chat_action(message.chat.id, "typing")
         
@@ -126,7 +161,6 @@ def get_sticker_pack(message):
         for i, sticker in enumerate(sticker_set.stickers[:10]):
             response_text += f"{i+1}. `{sticker.file_id}`\n\n"
             
-        # Fixed typo: parse_motion -> parse_mode
         bot.reply_to(message, response_text, parse_mode="Markdown")
         
     except Exception as e:
@@ -158,17 +192,27 @@ def handle_message(message):
     if user_id not in user_sessions:
         user_sessions[user_id] = [SYSTEM_PROMPT]
 
+    # Real-Time Timezone Setup (Asia/Kolkata)
+    ist = pytz.timezone('Asia/Kolkata')
+    current_datetime = datetime.now(ist).strftime("%A, %d %B %Y - %I:%M:%S %p")
+
     needs_search = any(keyword in user_text.lower() for keyword in SEARCH_KEYWORDS)
     prompt_to_send = user_text
 
+    search_data = ""
     if needs_search:
         bot.send_chat_action(user_id, "typing")
         search_data = search_duckduckgo(user_text)
-        prompt_to_send = (
-            f"User Question: {user_text}\n\n"
-            f"[Internet Search Data]:\n{search_data}\n\n"
-            f"Instruction: Search data ka use karke ek cool aur friendly Hinglish answer do."
-        )
+
+    # Context inject with Real-time Date, Time & Search Data
+    prompt_to_send = (
+        f"[Current Real-Time Context]: Date & Time (IST): {current_datetime}\n"
+        f"User Question: {user_text}\n\n"
+    )
+    if needs_search and search_data:
+        prompt_to_send += f"[Internet Live Browsing Data]:\n{search_data}\n\n"
+    
+    prompt_to_send += "Instruction: Real-time date/time aur search data ka use karke ek cool aur friendly Hinglish answer do."
 
     user_sessions[user_id].append({"role": "user", "content": prompt_to_send})
 
@@ -187,12 +231,10 @@ def handle_message(message):
         raw_reply = response.choices[0].message.content
 
         sticker_match = re.search(r'\[STICKER:\s*([a-zA-Z]+)\]', raw_reply)
-        sticker_to_send = None
+        emotion_to_send = None
 
         if sticker_match:
-            emotion = sticker_match.group(1).lower()
-            if emotion in STICKER_MAP and not STICKER_MAP[emotion].startswith("YAHAN_"): 
-                sticker_to_send = STICKER_MAP[emotion]
+            emotion_to_send = sticker_match.group(1).lower()
             clean_reply = re.sub(r'\[STICKER:\s*[a-zA-Z]+\]', '', raw_reply).strip()
         else:
             clean_reply = raw_reply
@@ -201,8 +243,9 @@ def handle_message(message):
         
         if clean_reply:
             bot.reply_to(message, clean_reply)
-        if sticker_to_send:
-            bot.send_sticker(user_id, sticker_to_send)
+        
+        if emotion_to_send and emotion_to_send in STICKER_PACK_NAMES:
+            send_pack_sticker(user_id, emotion_to_send)
 
     except Exception as e:
         print(f"❌ Error: {e}")
