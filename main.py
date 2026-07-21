@@ -14,18 +14,22 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 # Security Checks
 if not BOT_TOKEN:
-    print("❌ CRITICAL ERROR: 'BOT_TOKEN' missing in Environment Variables!")
+    print(
+        "❌ CRITICAL ERROR: 'BOT_TOKEN' Render Environment Variables mein missing hai!"
+    )
     sys.exit(1)
 
 if not GROQ_API_KEY:
-    print("❌ CRITICAL ERROR: 'GROQ_API_KEY' missing in Environment Variables!")
+    print(
+        "❌ CRITICAL ERROR: 'GROQ_API_KEY' Render Environment Variables mein missing hai!"
+    )
     sys.exit(1)
 
 # Initialize Groq Client & Telegram Bot
 client = Groq(api_key=GROQ_API_KEY)
 bot = telebot.TeleBot(BOT_TOKEN)
 
-TEXT_MODEL = "llama-3.2-3b-preview"  # Groq par ultra-fast Llama 3.2 model
+TEXT_MODEL = "llama-3.3-70b-versatile"  # Groq ka fast & free model
 user_sessions = {}
 
 
@@ -37,7 +41,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "⚡ Flashy AI Bot is healthy and running 24/7!"
+    return "⚡ Flashy AI Bot (Groq Engine) is healthy and running 24/7!"
 
 
 def run_web_server():
@@ -134,13 +138,14 @@ def handle_message(message):
 
     user_sessions[user_id].append({"role": "user", "content": prompt_to_send})
 
+    # Memory Limit (Last 10 messages)
     if len(user_sessions[user_id]) > 14:
         user_sessions[user_id] = [SYSTEM_PROMPT] + user_sessions[user_id][-10:]
 
     try:
         bot.send_chat_action(user_id, "typing")
 
-        # Groq API call
+        # Groq Cloud API Call
         response = client.chat.completions.create(
             model=TEXT_MODEL, messages=user_sessions[user_id]
         )
