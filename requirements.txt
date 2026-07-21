@@ -1,4 +1,5 @@
-pyTelegramBotAPI
-groq
-duckduckgo_search
 Flask
+groq
+pytz
+pyTelegramBotAPI
+duckduckgo-search
