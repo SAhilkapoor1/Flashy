@@ -1,0 +1,4 @@
+pyTelegramBotAPI
+ollama
+duckduckgo_search
+Flask
