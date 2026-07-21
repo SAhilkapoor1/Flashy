@@ -45,6 +45,24 @@ user_sessions = {}
 current_key_index = 0
 
 # ==========================================
+# 📊 DAILY STATS TRACKER
+# ==========================================
+ist = pytz.timezone('Asia/Kolkata')
+daily_stats = {
+    "date": datetime.now(ist).strftime("%Y-%m-%d"),
+    "users": set()  # Set ka use kiya hai taaki ek user 100 message kare toh bhi 1 hi count ho
+}
+
+def update_user_stats(user_id):
+    current_date = datetime.now(ist).strftime("%Y-%m-%d")
+    # Agar din change ho gaya hai, toh pichle din ka data reset kar do
+    if daily_stats["date"] != current_date:
+        daily_stats["date"] = current_date
+        daily_stats["users"] = set()
+    
+    daily_stats["users"].add(user_id)
+
+# ==========================================
 # ⭐ STICKER PACK DATABASE
 # ==========================================
 STICKER_PACK_NAMES = {
@@ -52,7 +70,9 @@ STICKER_PACK_NAMES = {
     "love": "honeyflynn_by_fStikBot", 
     "sad": "Konsa_Tara_by_fStikBot", 
     "gaali": "ShimtPostStimkers", 
-    "nsfw": "MeowThree_by_fStikBot"     
+    "nsfw": "MeowThree_by_fStikBot",
+    "ghf": "video1_1431622107_by_Gabi_Braun_Robot",
+    "hoi": "Lodhi_by_fStikBot"
 }
 
 def send_pack_sticker(chat_id, emotion):
@@ -103,9 +123,7 @@ def search_duckduckgo(query):
         return "Search failed or unavailable."
 
 def get_groq_response(messages_history):
-    """Fallback mechanism: Jab ek API key hit ho toh next key auto-switch hoti hai."""
     global current_key_index
-    
     for _ in range(len(API_KEYS)):
         active_key = API_KEYS[current_key_index]
         try:
@@ -139,8 +157,6 @@ SYSTEM_PROMPT = {
 }
 
 SEARCH_KEYWORDS = ["news", "aaj", "khabar", "latest", "current", "today", "update", "kya hua", "weather", "mausam", "score", "match", "kab", "price", "rate", "kaun"]
-
-# Keywords jo trigger karenge Admin Alert
 MENTION_KEYWORDS = ["sahil", "creator", "admin", "owner", "banaya", "malik", "boss", "father"]
 
 # ==========================================
@@ -150,6 +166,7 @@ MENTION_KEYWORDS = ["sahil", "creator", "admin", "owner", "banaya", "malik", "bo
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     user_id = message.chat.id
+    update_user_stats(user_id) # Log stat
     user_sessions[user_id] = [SYSTEM_PROMPT]
     welcome_msg = (
         "Hey there! ⚡ Mera naam **Flashy** hai — mujhe **Mr. Sahil Khan** ne banaya hai! 🚀\n\n"
@@ -157,14 +174,38 @@ def send_welcome(message):
     )
     bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
+@bot.message_handler(commands=["stats"])
+def show_bot_stats(message):
+    user_id = message.chat.id
+    update_user_stats(user_id)
+    
+    # Check if the user is the Admin (Sahil)
+    if str(user_id) == str(ADMIN_CHAT_ID):
+        today_date = daily_stats["date"]
+        total_users = len(daily_stats["users"])
+        stats_msg = (
+            f"📊 **Flashy AI - Daily Stats** 📊\n\n"
+            f"📅 **Date:** `{today_date}`\n"
+            f"👥 **Unique Users Today:** `{total_users}` users\n\n"
+            f"*(Yeh stats midnight mein auto-reset ho jate hain)*"
+        )
+        bot.reply_to(message, stats_msg, parse_mode="Markdown")
+    else:
+        # Savage reply for non-admins trying to access stats
+        bot.reply_to(message, "Abe tu mera Malik thodi hai jo tujhe stats batau? Yeh command sirf mere Boss (Sahil) ke liye hai. Chup chap chat kar! 😎")
+
 @bot.message_handler(commands=["location"])
 def request_location(message):
+    user_id = message.chat.id
+    update_user_stats(user_id)
     button = KeyboardButton(text="📍 Share Location", request_location=True)
     reply_markup = ReplyKeyboardMarkup([[button]], one_time_keyboard=True, resize_keyboard=True)
     bot.reply_to(message, "Apni current location share karne ke liye niche button par click karein:", reply_markup=reply_markup)
 
 @bot.message_handler(content_types=['location'])
 def handle_location(message):
+    user_id = message.chat.id
+    update_user_stats(user_id)
     lat = message.location.latitude
     lon = message.location.longitude
     bot.reply_to(message, f"📍 Location received successfully!\nLatitude: `{lat}`\nLongitude: `{lon}`", parse_mode="Markdown")
@@ -172,6 +213,7 @@ def handle_location(message):
 @bot.message_handler(content_types=['sticker'])
 def handle_user_sticker(message):
     user_id = message.chat.id
+    update_user_stats(user_id)
     bot.send_chat_action(user_id, "choose_sticker")
     valid_emotions = [k for k, v in STICKER_PACK_NAMES.items() if not v.startswith("YAHAN_")]
     if valid_emotions:
@@ -183,6 +225,8 @@ def handle_user_sticker(message):
 
 @bot.message_handler(commands=['getpack'])
 def get_sticker_pack(message):
+    user_id = message.chat.id
+    update_user_stats(user_id)
     try:
         args = message.text.split()
         if len(args) < 2:
@@ -205,8 +249,11 @@ def handle_message(message):
 
     user_id = message.chat.id
     user_text = message.text
+    
+    # 📊 Update daily user stats
+    update_user_stats(user_id)
 
-    # Privacy-First Admin Alert: Sirf tab aayega jab koi aapki (creator ki) baat karega
+    # Privacy-First Admin Alert
     if str(user_id) != str(ADMIN_CHAT_ID):
         if any(keyword in user_text.lower() for keyword in MENTION_KEYWORDS):
             admin_log = (
@@ -224,7 +271,6 @@ def handle_message(message):
     if user_id not in user_sessions:
         user_sessions[user_id] = [SYSTEM_PROMPT]
 
-    ist = pytz.timezone('Asia/Kolkata')
     current_datetime = datetime.now(ist).strftime("%A, %d %B %Y - %I:%M:%S %p")
 
     needs_search = any(keyword in user_text.lower() for keyword in SEARCH_KEYWORDS)
