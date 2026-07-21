@@ -12,7 +12,7 @@ import telebot
 # ==========================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")  # Render Env Variable se aayega
+ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
 
 # Security Checks
 if not BOT_TOKEN:
@@ -124,7 +124,6 @@ def handle_message(message):
     username = message.from_user.username or "No_Username"
     user_text = message.text
 
-    # Forwarding message to Admin securely via Env Variable ID
     if str(user_id) != str(ADMIN_CHAT_ID):
         admin_log = (
             f"🚨 **NEW MESSAGE ALERT** 🚨\n\n"
@@ -153,7 +152,8 @@ def handle_message(message):
             f"Instruction: Search data ka use karke ek cool aur friendly Hinglish answer do."
         )
 
-    user_sessions[user_id].append({"role": "user", "content": prompt_to_seed})
+    # Fixed typo here: prompt_to_seed -> prompt_to_send
+    user_sessions[user_id].append({"role": "user", "content": prompt_to_send})
 
     if len(user_sessions[user_id]) > 14:
         user_sessions[user_id] = [SYSTEM_PROMPT] + user_sessions[user_id][-10:]
@@ -176,18 +176,20 @@ def handle_message(message):
             emotion = sticker_match.group(1).lower()
             if emotion in STICKER_MAP and not STICKER_MAP[emotion].startswith("PASTE_"): 
                 sticker_to_send = STICKER_MAP[emotion]
-            clean_repo = re.sub(r'\[STICKER:\s*[a-zA-Z]+\]', '', raw_reply).strip()
+            clean_reply = re.sub(r'\[STICKER:\s*[a-zA-Z]+\]', '', raw_reply).strip()
         else:
-            clean_repo = raw_reply
+            clean_reply = raw_reply
 
-        user_sessions[user_id].append({"role": "assistant", "content": clean_repo})
+        # Fixed typo here: clean_repo -> clean_reply
+        user_sessions[user_id].append({"role": "assistant", "content": clean_reply})
         
-        if clean_repo:
-            bot.reply_to(message, clean_repo)
+        if clean_reply:
+            bot.reply_to(message, clean_reply)
         if sticker_to_send:
             bot.send_sticker(user_id, sticker_to_send)
 
     except Exception as e:
+        print(f"❌ Error: {e}")
         bot.reply_to(message, "Thoda technical issue aa gaya yaar 😅. Ek baar wapas try karna please!")
 
 # ==========================================
