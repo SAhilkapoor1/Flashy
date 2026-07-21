@@ -14,15 +14,11 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 # Security Checks
 if not BOT_TOKEN:
-    print(
-        "❌ CRITICAL ERROR: 'BOT_TOKEN' Render Environment Variables mein missing hai!"
-    )
+    print("❌ CRITICAL ERROR: 'BOT_TOKEN' Render Environment Variables mein missing hai!")
     sys.exit(1)
 
 if not GROQ_API_KEY:
-    print(
-        "❌ CRITICAL ERROR: 'GROQ_API_KEY' Render Environment Variables mein missing hai!"
-    )
+    print("❌ CRITICAL ERROR: 'GROQ_API_KEY' Render Environment Variables mein missing hai!")
     sys.exit(1)
 
 # Initialize Groq Client & Telegram Bot
@@ -50,7 +46,7 @@ def run_web_server():
 
 
 # ==========================================
-# 3. HELPER FUNCTIONS & PERSONA
+# 3. HELPER FUNCTIONS & STRICT PERSONA
 # ==========================================
 def search_duckduckgo(query):
     """DuckDuckGo se Web Search karne ke liye"""
@@ -70,13 +66,16 @@ def search_duckduckgo(query):
         return "Search failed."
 
 
+# Bot ka ekdum strict behavior rule (No Intro, No Faltu Bhashan)
 SYSTEM_PROMPT = {
     "role": "system",
     "content": (
-        "Aapka naam Flashy hai. Aap ek highly intelligent, fast aur super-friendly AI Assistant hain. "
-        "Aap Geopolitics, News, Technology aur General conversation mein expert hain. "
-        "Jab bhi koi aapka naam puche, hamesha bataiye ki aapka naam 'Flashy' hai. "
-        "User ke sawalon ka jawab simple, accurate, energetic aur friendly Hinglish mein dein."
+        "Aap ek fast aur smart AI Assistant hain. "
+        "CRITICAL INSTRUCTIONS: "
+        "1. Jawab bilkul TO THE POINT aur chota dein. Sirf sawal ka exact answer dein. "
+        "2. KABHI BHI apna introduction na dein. Apna naam KABHI BHI use mat karein. (Introduction is STRICTLY BANNED). "
+        "3. Faltu ke conversational fillers (jaise 'Hello', 'Main samajhta hoon', 'Yaar', 'Mera naam Flashy hai') bilkul use na karein. "
+        "4. Language: Natural aur direct Hinglish. Seedhe mudde ki baat karein."
     ),
 }
 
@@ -96,7 +95,7 @@ SEARCH_KEYWORDS = [
 # 4. TELEGRAM HANDLERS
 # ==========================================
 
-
+# Yeh sirf start hone par intro dega
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     user_id = message.chat.id
@@ -113,6 +112,7 @@ def send_welcome(message):
     bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
 
+# Main Chat Handler
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     user_id = message.chat.id
@@ -133,21 +133,24 @@ def handle_message(message):
         prompt_to_send = (
             f"User Question: {user_text}\n\n"
             f"[Internet Search Data]:\n{search_data}\n\n"
-            f"Instruction: Search data ke basis par Flashy ke style mein clear aur energetic Hinglish answer dein."
+            f"Instruction: Search data ke basis par sirf kaam ki baat ka direct Hinglish answer dein."
         )
 
     user_sessions[user_id].append({"role": "user", "content": prompt_to_send})
 
-    # Memory Limit (Last 10 messages)
+    # Memory Limit (Pichle 10 messages yaad rakhega)
     if len(user_sessions[user_id]) > 14:
         user_sessions[user_id] = [SYSTEM_PROMPT] + user_sessions[user_id][-10:]
 
     try:
         bot.send_chat_action(user_id, "typing")
 
-        # Groq Cloud API Call
+        # Groq Cloud API Call (Temperature = 0.3 kiya hai taaki point-to-point baat kare)
         response = client.chat.completions.create(
-            model=TEXT_MODEL, messages=user_sessions[user_id]
+            model=TEXT_MODEL, 
+            messages=user_sessions[user_id],
+            temperature=0.3,
+            max_tokens=300
         )
         bot_reply = response.choices[0].message.content
 
@@ -169,12 +172,14 @@ def handle_message(message):
 # 5. MAIN RUNNER
 # ==========================================
 if __name__ == "__main__":
+    # Flask ko background mein chalana zaroori hai Render ke liye
     server_thread = Thread(target=run_web_server)
     server_thread.daemon = True
     server_thread.start()
 
-    print("🟢 Flashy (Groq Cloud) is listening for Telegram messages...")
+    print("🟢 Flashy is listening for Telegram messages...")
 
+    # Bot Polling Start
     bot.infinity_polling(
         timeout=20, long_polling_timeout=10, skip_pending=True
     )
