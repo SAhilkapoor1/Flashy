@@ -35,14 +35,15 @@ TEXT_MODEL = "llama-3.3-70b-versatile"
 user_sessions = {}
 
 # ==========================================
-# ⭐ STICKER DATABASE
+# ⭐ STICKER DATABASE 
+# (Yahan apne sticker packs se IDs nikal kar paste karein)
 # ==========================================
 STICKER_MAP = {
-    "laugh": "PASTE_LAUGH_STICKER_ID_HERE", 
-    "love": "PASTE_LOVE_STICKER_ID_HERE",
-    "sad": "PASTE_SAD_STICKER_ID_HERE",
-    "gaali": "PASTE_ABUSIVE_STICKER_ID_HERE",  
-    "nsfw": "PASTE_18PLUS_STICKER_ID_HERE"     
+    "laugh": "YAHAN_LAUGH_WALA_ID_DAALEIN", 
+    "love": "YAHAN_LOVE_WALA_ID_DAALEIN",
+    "sad": "YAHAN_SAD_WALA_ID_DAALEIN",
+    "gaali": "YAHAN_GAALI_WALA_ID_DAALEIN",  
+    "nsfw": "YAHAN_NSFW_WALA_ID_DAALEIN"     
 }
 
 # ==========================================
@@ -103,22 +104,38 @@ def send_welcome(message):
 
     welcome_msg = (
         "Hey there! ⚡ Mera naam **Flashy** hai — mujhe **Mr. Sahil Kapoor** ne banaya hai! 🚀\n\n"
-        "Aap mere se kuch bhi baat kar sakte ho. Send me a sticker aur main uska ID nikaal kar dunga!"
+        "Aap mere se kuch bhi baat kar sakte ho."
     )
     bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
-@bot.message_handler(content_types=['sticker'])
-def handle_sticker(message):
-    sticker_id = message.sticker.file_id
-    reply_text = (
-        "🎯 **Sticker ID Mil Gaya!**\n\n"
-        f"`{sticker_id}`\n\n"
-        "Isko copy karo aur apne `main.py` ke `STICKER_MAP` dictionary mein paste kar do!"
-    )
-    bot.reply_to(message, reply_text, parse_mode="Markdown")
+# 🛠️ STICKER PACK ID FINDER COMMAND (/getpack PackName)
+@bot.message_handler(commands=['getpack'])
+def get_sticker_pack(message):
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "Bhai pack ka naam bhi likho! Jaise: `/getpack AnimalsAnimation`", parse_mode="Markdown")
+            return
+        
+        pack_name = args[1]
+        bot.send_chat_action(message.chat.id, "typing")
+        
+        sticker_set = bot.get_sticker_set(pack_name)
+        response_text = f"📦 **Pack Name:** `{sticker_set.name}`\nTotal Stickers: {len(sticker_set.stickers)}\n\n"
+        
+        for i, sticker in enumerate(sticker_set.stickers[:10]):
+            response_text += f"{i+1}. `{sticker.file_id}`\n\n"
+            
+        bot.reply_to(message, response_text, parse_motion="Markdown" if hasattr(bot, 'Markdown') else "Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error aa gaya bhai: `{e}`", parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
+    if not message.text:
+        return
+
     user_id = message.chat.id
     user_name = message.from_user.first_name or "Unknown"
     username = message.from_user.username or "No_Username"
@@ -152,7 +169,6 @@ def handle_message(message):
             f"Instruction: Search data ka use karke ek cool aur friendly Hinglish answer do."
         )
 
-    # Fixed typo here: prompt_to_seed -> prompt_to_send
     user_sessions[user_id].append({"role": "user", "content": prompt_to_send})
 
     if len(user_sessions[user_id]) > 14:
@@ -174,13 +190,12 @@ def handle_message(message):
 
         if sticker_match:
             emotion = sticker_match.group(1).lower()
-            if emotion in STICKER_MAP and not STICKER_MAP[emotion].startswith("PASTE_"): 
+            if emotion in STICKER_MAP and not STICKER_MAP[emotion].startswith("YAHAN_"): 
                 sticker_to_send = STICKER_MAP[emotion]
             clean_reply = re.sub(r'\[STICKER:\s*[a-zA-Z]+\]', '', raw_reply).strip()
         else:
             clean_reply = raw_reply
 
-        # Fixed typo here: clean_repo -> clean_reply
         user_sessions[user_id].append({"role": "assistant", "content": clean_reply})
         
         if clean_reply:
