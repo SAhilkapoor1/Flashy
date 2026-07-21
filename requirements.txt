@@ -2,4 +2,4 @@ Flask
 groq
 pytz
 pyTelegramBotAPI
-duckduckgo-search
+ddgs
